@@ -38,6 +38,10 @@ export interface CreateApplicationInput {
   portfolioUrl?: string | null;
   coverLetter?: string | null;
   resumeUrl?: string | null;
+  resumeKey?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
   status?: ApplicationStatus;
 }
 
@@ -86,6 +90,10 @@ export class ApplicationRepository {
           portfolioUrl: data.portfolioUrl ?? null,
           coverLetter: data.coverLetter ?? null,
           resumeUrl: data.resumeUrl ?? null,
+          resumeKey: data.resumeKey ?? null,
+          fileName: data.fileName ?? null,
+          fileSize: data.fileSize ?? null,
+          mimeType: data.mimeType ?? null,
           status: data.status ?? ApplicationStatus.APPLIED,
         },
       });

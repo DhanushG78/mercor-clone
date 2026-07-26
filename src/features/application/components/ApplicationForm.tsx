@@ -28,7 +28,12 @@ interface ApplicationFormProps {
   onSubmitSuccess?: () => void;
 }
 
+import { useState } from "react";
+
 export function ApplicationForm({ job, onSubmitSuccess }: ApplicationFormProps) {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+
   const form = useForm<Application>({
     resolver: zodResolver(applicationSchema),
     defaultValues: {
@@ -45,43 +50,57 @@ export function ApplicationForm({ job, onSubmitSuccess }: ApplicationFormProps) 
 
   const onSubmit = async (data: Application) => {
     try {
-      // TODO: Replace with production logging
-      console.log("[Application Form] Initiating submit flow for candidate:", data.email);
+      let s3Result = null;
 
-      // Call the frontend API client. Passing placeholder resume base64 & filename to satisfy route validations.
+      // 1. Upload resume to S3 first if candidate selected a file
+      if (selectedFile) {
+        setIsUploadingFile(true);
+        const uploadResponse = await applicationClient.uploadResumeFile(selectedFile);
+        setIsUploadingFile(false);
+
+        if (!uploadResponse.success) {
+          toast.error(uploadResponse.message || "Failed to upload resume to S3. Please try again.");
+          return;
+        }
+
+        s3Result = uploadResponse.data;
+      }
+
+      // 2. Submit candidate application with S3 metadata
       const response = await applicationClient.submitApplication({
         jobId: job.id,
         name: data.fullName,
         email: data.email,
         phone: data.phone,
-        resumeBase64: "dummy_resume_base64_placeholder",
-        resumeFileName: "resume.pdf",
         coverLetter: data.coverLetter || null,
         jobTitle: job.title,
         companyName: job.company?.name || null,
         linkedinUrl: data.linkedinUrl || null,
         portfolioUrl: data.portfolioUrl || null,
+        resumeUrl: s3Result?.url || null,
+        resumeKey: s3Result?.key || null,
+        fileName: s3Result?.fileName || null,
+        fileSize: s3Result?.fileSize || null,
+        mimeType: s3Result?.mimeType || null,
       });
 
       if (!response.success) {
-        // TODO: Replace with production logging
         console.error("[Application Form Submit Error]:", response.message);
         toast.error(response.message || "Submission failed. Please check your details and try again.");
         return;
       }
 
-      // TODO: Replace with production logging
-      console.log("[Application Form Submit Success] Persisted ID:", response.data.id);
       toast.success("Your job application has been submitted successfully!");
       
       // Reset form controls
       form.reset();
+      setSelectedFile(null);
 
       if (onSubmitSuccess) {
         onSubmitSuccess();
       }
     } catch (err: any) {
-      // TODO: Replace with production logging
+      setIsUploadingFile(false);
       console.error("[Application Form Submit Exception]:", err);
       toast.error("A network or system error occurred. Please try again later.");
     }
@@ -230,16 +249,23 @@ export function ApplicationForm({ job, onSubmitSuccess }: ApplicationFormProps) 
         />
 
         {/* Resume Upload */}
-        <ResumeUpload />
+        <ResumeUpload
+          selectedFile={selectedFile}
+          onFileSelect={setSelectedFile}
+        />
 
         {/* Submit */}
         <div className="pt-1">
           <Button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isUploadingFile}
             className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-semibold py-3 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.99]"
           >
-            {isSubmitting ? "Submitting…" : "Submit Application"}
+            {isUploadingFile
+              ? "Uploading Resume to S3..."
+              : isSubmitting
+              ? "Submitting Application..."
+              : "Submit Application"}
           </Button>
         </div>
       </form>

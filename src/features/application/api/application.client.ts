@@ -1,4 +1,5 @@
 import type { Application as ApplicationDb, ApplicationStatus } from "../../../generated/prisma/client";
+import type { S3UploadResult } from "../services/s3.service";
 
 /**
  * Reusable Client-Side API Success Structure
@@ -34,13 +35,16 @@ export interface SubmitApplicationRequest {
   name: string;
   email: string;
   phone: string;
-  resumeBase64: string; // Base64 representation for files submission
-  resumeFileName: string;
   coverLetter?: string | null;
   jobTitle?: string | null;
   companyName?: string | null;
   linkedinUrl?: string | null;
   portfolioUrl?: string | null;
+  resumeUrl?: string | null;
+  resumeKey?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
 }
 
 /**
@@ -64,6 +68,7 @@ export interface GetApplicationsClientFilters {
  */
 export class ApplicationClient {
   private readonly baseUrl = "/api/applications";
+  private readonly uploadUrl = "/api/upload-resume";
 
   /**
    * Helper request utility.
@@ -71,21 +76,13 @@ export class ApplicationClient {
    */
   private async request<T>(url: string, options: RequestInit = {}): Promise<ApiClientResponse<T>> {
     try {
-      // 1. Prepare base request headers (future-ready for token authorization)
       const headers = new Headers(options.headers);
-      if (!headers.has("Content-Type")) {
+      if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
         headers.set("Content-Type", "application/json");
       }
 
-      // TODO: [Future Authentication] Extract auth tokens from global state/local storage and attach
-      // headers.set("Authorization", `Bearer ${extractTokenFromSession()}`);
-
-      // TODO: [Future Telemetry] Add client metadata / tracking metrics
-      // headers.set("X-Correlation-ID", generateUuid());
-      // headers.set("X-Client-Version", "1.0.0");
-
       const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 15000); // 15s timeout limit
+      const id = setTimeout(() => controller.abort(), 30000); // 30s timeout limit for file uploads
 
       const response = await fetch(url, {
         ...options,
@@ -95,7 +92,6 @@ export class ApplicationClient {
 
       clearTimeout(id);
 
-      // 2. Parse response JSON safely
       let jsonResult: any;
       try {
         jsonResult = await response.json();
@@ -122,13 +118,12 @@ export class ApplicationClient {
       };
 
     } catch (networkError: any) {
-      // TODO: Replace with production logging
       console.error("[API Client Network Error] Request failed:", networkError);
       
       if (networkError.name === "AbortError") {
         return {
           success: false,
-          message: "Request timed out after 15 seconds.",
+          message: "Request timed out.",
           error: { code: "REQUEST_TIMEOUT" },
         };
       }
@@ -142,15 +137,25 @@ export class ApplicationClient {
   }
 
   /**
+   * Uploads candidate's resume file to S3 via backend endpoint.
+   * Endpoint: POST /api/upload-resume
+   */
+  async uploadResumeFile(file: File): Promise<ApiClientResponse<S3UploadResult>> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    return this.request<S3UploadResult>(this.uploadUrl, {
+      method: "POST",
+      body: formData,
+    });
+  }
+
+  /**
    * Submits a candidate's job application from the frontend form.
    * 
    * Endpoint: POST /api/applications
    */
   async submitApplication(input: SubmitApplicationRequest): Promise<ApiClientResponse<ApplicationDb>> {
-    // TODO: [Future Resume Upload Client hook] Before POSTing details, upload raw File to S3 bucket directly.
-    // e.g. const s3Result = await s3UploadHelper(file);
-    // input.resumeUrl = s3Result.Location;
-
     return this.request<ApplicationDb>(this.baseUrl, {
       method: "POST",
       body: JSON.stringify(input),

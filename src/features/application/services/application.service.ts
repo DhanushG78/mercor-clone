@@ -24,6 +24,10 @@ export interface SubmitApplicationInput {
   portfolioUrl?: string | null;
   coverLetter?: string | null;
   resumeUrl?: string | null;
+  resumeKey?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
 }
 
 /**
@@ -40,7 +44,7 @@ export class ApplicationService {
    * Orchestrates the candidate job application submission flow.
    * 
    * Purpose:
-   * Validates applicant parameters, runs business checks, uploads file assets (future), 
+   * Validates applicant parameters, runs business checks, processes S3 resume metadata,
    * and saves the application record.
    * 
    * Input: SubmitApplicationInput details.
@@ -48,19 +52,7 @@ export class ApplicationService {
    */
   async submitApplication(input: SubmitApplicationInput): Promise<ServiceResult<Application>> {
     try {
-      // TODO: [Future Logging] Log initiation of application submission
-      // console.log(`[Business Log] Starting application submission for candidate ${input.email}`);
-
-      // TODO: [Future Validation] Validate email rate-limiting or duplicate applications check.
-      // e.g. verify if the user already applied to this jobId recently.
-
-      // TODO: [Future Resume Upload] Process resume files (validate size/type, upload to Supabase bucket/AWS S3).
-      // e.g. const uploadedResumeUrl = await uploadResumeToBucket(file);
-
-      // TODO: [Future AI Resume Analysis] Send file to AI parsing engine (AWS Textract or Claude/Gemini model).
-      // e.g. queueJob('ai-analysis', { resumeUrl });
-
-      // 1. Call Repository to persist record in database
+      // 1. Call Repository to persist record in database with S3 resume metadata
       const application = await applicationRepository.createApplication({
         jobId: input.jobId,
         jobTitle: input.jobTitle,
@@ -72,23 +64,12 @@ export class ApplicationService {
         portfolioUrl: input.portfolioUrl,
         coverLetter: input.coverLetter,
         resumeUrl: input.resumeUrl,
+        resumeKey: input.resumeKey,
+        fileName: input.fileName,
+        fileSize: input.fileSize,
+        mimeType: input.mimeType,
         status: ApplicationStatus.APPLIED,
       });
-
-      // TODO: [Future Logging] Log successful DB persistence
-      // console.log(`[Business Log] Application submitted successfully: ${application.id}`);
-
-      // TODO: [Future Notifications] Trigger transactional confirmation emails to Candidate.
-      // e.g. queueEmail('candidate-applied', { email: application.email });
-
-      // TODO: [Future Recruiter Notifications] Notify hiring manager / recruiters (Slack alerts, in-app notifications).
-      // e.g. triggerSlackWebhook({ message: `New applicant for ${application.jobTitle}` });
-
-      // TODO: [Future Webhooks] Dispatch webhook event notification to external ATS client systems.
-
-      // TODO: [Future Timeline] Log event to Application Timeline / Activity Log history table.
-
-      // TODO: [Future Analytics] Publish application-created event to database analytics logs or segment/amplitude.
 
       return {
         success: true,
@@ -96,8 +77,14 @@ export class ApplicationService {
         message: "Application submitted successfully.",
       };
     } catch (error: any) {
-      // TODO: Replace with production logging
       console.error("[Service Error] submitApplication failed:", error);
+
+      // TODO: [Rollback Strategy] If database persistence fails after S3 upload,
+      // trigger s3Service.deleteResume(input.resumeKey) to prevent orphaned files in S3.
+      if (input.resumeKey) {
+        console.warn(`[Rollback Candidate] S3 object key "${input.resumeKey}" marked for deletion due to DB failure.`);
+      }
+
       return {
         success: false,
         message: error.message || "Failed to submit job application.",

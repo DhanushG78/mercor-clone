@@ -33,32 +33,48 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
     
-    // Extract request fields
-    const { jobId, jobTitle, companyName, name, email, phone, resumeBase64, resumeFileName, coverLetter, linkedinUrl, portfolioUrl } = body;
+    // Extract request fields including S3 metadata
+    const {
+      jobId,
+      jobTitle,
+      companyName,
+      name,
+      email,
+      phone,
+      coverLetter,
+      linkedinUrl,
+      portfolioUrl,
+      resumeUrl,
+      resumeKey,
+      fileName,
+      fileSize,
+      mimeType,
+    } = body;
 
     // Validate presence of required inputs
-    if (!jobId || !name || !email || !phone || !resumeBase64 || !resumeFileName) {
+    if (!jobId || !name || !email || !phone) {
       return NextResponse.json(
-        { success: false, message: "Missing required fields (jobId, name, email, phone, resumeBase64, resumeFileName)" },
+        { success: false, message: "Missing required fields (jobId, name, email, phone)" },
         { status: 400 }
       );
     }
 
-    // TODO: [Future Resume Upload Integration] Upload resumeBase64 buffer to cloud storage (S3/Supabase)
-    const dummyResumeUrl = `https://mercor-clone-applications.s3.amazonaws.com/resumes/${Date.now()}-${resumeFileName}`;
-
     // Invoke the API controller layer directly
     const result = await applicationApi.submitApplication({
       jobId,
-      jobTitle: jobTitle || "Placeholder Job Title",
-      companyName: companyName || "Placeholder Company Name",
+      jobTitle: jobTitle || "Job Opportunity",
+      companyName: companyName || "Company",
       candidateName: name,
       email,
       phone,
-      coverLetter,
+      coverLetter: coverLetter || null,
       linkedinUrl: linkedinUrl || null,
       portfolioUrl: portfolioUrl || null,
-      resumeUrl: dummyResumeUrl,
+      resumeUrl: resumeUrl || null,
+      resumeKey: resumeKey || null,
+      fileName: fileName || null,
+      fileSize: fileSize || null,
+      mimeType: mimeType || null,
     });
 
     // TODO: [Future Performance Metrics] Publish response duration telemetry

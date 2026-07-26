@@ -46,7 +46,13 @@ model Application {
   linkedinUrl   String?
   portfolioUrl  String?
   coverLetter   String?
+
+  // Resume S3 Metadata
   resumeUrl     String?
+  resumeKey     String?
+  fileName      String?
+  fileSize      Int?
+  mimeType      String?
   
   // Process State
   status        ApplicationStatus @default(APPLIED)
