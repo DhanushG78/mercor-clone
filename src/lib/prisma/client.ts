@@ -32,9 +32,9 @@ if (isServer) {
   if (globalForPrisma.prisma) {
     prismaInstance = globalForPrisma.prisma;
   } else {
-    // 1. Establish database connection pool configuration using pg
+    const connectionString = env.DATABASE_URL || "postgres://placeholder:placeholder@localhost:5432/placeholder";
     const pool = new pg.Pool({
-      connectionString: env.DATABASE_URL,
+      connectionString,
     });
 
     // 2. Wrap it with the Prisma 7 PostgreSQL driver adapter

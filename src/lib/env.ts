@@ -32,11 +32,12 @@ const serverEnvSchema = z.object({
   DATABASE_URL: postgresUrlSchema,
   DIRECT_URL: postgresUrlSchema,
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "SUPABASE_SERVICE_ROLE_KEY is required"),
-  AWS_ACCESS_KEY_ID: z.string().min(1, "AWS_ACCESS_KEY_ID is required"),
-  AWS_SECRET_ACCESS_KEY: z.string().min(1, "AWS_SECRET_ACCESS_KEY is required"),
-  AWS_REGION: z.string().min(1, "AWS_REGION is required"),
-  AWS_BUCKET_NAME: z.string().min(1, "AWS_BUCKET_NAME is required"),
-  AWS_BUCKET_URL: z.string().url("AWS_BUCKET_URL must be a valid URL"),
+  // AWS keys are optional until file upload feature is implemented
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  AWS_REGION: z.string().optional(),
+  AWS_BUCKET_NAME: z.string().optional(),
+  AWS_BUCKET_URL: z.string().url("AWS_BUCKET_URL must be a valid URL").optional(),
 });
 
 const isServer = typeof window === "undefined";
