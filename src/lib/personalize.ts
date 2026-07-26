@@ -28,7 +28,9 @@ export async function getPersonalizeSdk(attributes?: Record<string, any>): Promi
 
   const projectUid = process.env.NEXT_PUBLIC_CONTENTSTACK_PERSONALIZE_PROJECT_UID;
   if (!projectUid) {
-    console.warn('⚠️ Personalization Project UID (NEXT_PUBLIC_CONTENTSTACK_PERSONALIZE_PROJECT_UID) is missing. Personalization will be disabled.');
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('⚠️ Personalization Project UID is missing. Personalization will be disabled.');
+    }
     return null;
   }
 
@@ -50,17 +52,21 @@ export async function getPersonalizeSdk(attributes?: Record<string, any>): Promi
     // Initialize Contentstack Personalize Client
     personalizeInstance = await Personalize.init(projectUid, initOptions);
 
-    console.log('✓ Contentstack Personalize SDK initialized successfully.');
-    console.log('Visitor ID:', personalizeInstance.getUserId());
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✓ Contentstack Personalize SDK initialized successfully.');
+      console.log('Visitor ID:', personalizeInstance.getUserId());
+    }
 
     return personalizeInstance;
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    const isNetworkError = errorMsg.includes('Failed to fetch') || errorMsg.includes('fetch');
-    if (isNetworkError) {
-      console.warn('⚠️ Contentstack Personalize Edge API is unreachable (Failed to fetch). Running in offline/fallback mode.');
-    } else {
-      console.error('Failed to initialize Contentstack Personalize SDK:', error);
+    if (process.env.NODE_ENV === 'development') {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const isNetworkError = errorMsg.includes('Failed to fetch') || errorMsg.includes('fetch');
+      if (isNetworkError) {
+        console.warn('⚠️ Contentstack Personalize Edge API is unreachable (Failed to fetch). Running in offline/fallback mode.');
+      } else {
+        console.error('Failed to initialize Contentstack Personalize SDK:', error);
+      }
     }
     return null;
   } finally {
