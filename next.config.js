@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "standalone",
+  outputFileTracingExcludes: {
+    '*': [
+      './src/generated/prisma/*.wasm*',
+      './node_modules/@prisma/engines/**',
+    ],
+  },
   typescript: {
     // Dangerously allow production builds to successfully complete even if
     // your project has type errors. We verify typescript safety locally.
