@@ -64,13 +64,11 @@ export function PersonalizeProvider({ children }: { children: React.ReactNode })
         sdk
           .set({ visitor_persona: persona })
           .then(async () => {
-            if (process.env.NODE_ENV === "development") {
-              console.log(
-                `%c[Personalize Sync]`,
-                "color: #2563eb; font-weight: bold;",
-                `Synced persona attribute: "${persona}". Re-evaluating manifest...`
-              );
-            }
+            console.log(
+              `%c[Personalize Sync]`,
+              "color: #2563eb; font-weight: bold;",
+              `Synced persona attribute: "${persona}". Re-evaluating manifest...`
+            );
 
             // Force refresh of the Personalize SDK manifest to pull newly computed experiences
             const refreshedSdk = await refreshPersonalizeSdk(persona ? { visitor_persona: persona } : undefined);
@@ -79,9 +77,7 @@ export function PersonalizeProvider({ children }: { children: React.ReactNode })
             }
           })
           .catch((error) => {
-            if (process.env.NODE_ENV === "development") {
-              console.error("[Personalize Sync] Failed to synchronize persona:", error);
-            }
+            console.error("[Personalize Sync] Failed to synchronize persona:", error);
           });
       }
     };

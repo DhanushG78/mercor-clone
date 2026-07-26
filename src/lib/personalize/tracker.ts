@@ -28,9 +28,7 @@ export async function trackEvent<K extends PersonalizeEventKey>(
   try {
     const sdk = await getPersonalizeSdk();
     if (!sdk) {
-      if (process.env.NODE_ENV === "development") {
-        console.warn(`[Personalize] SDK not initialized. Skipping event: ${eventKey}`);
-      }
+      console.warn(`[Personalize] SDK not initialized. Skipping event: ${eventKey}`);
       return;
     }
 
@@ -42,17 +40,13 @@ export async function trackEvent<K extends PersonalizeEventKey>(
     // Trigger the event
     await sdk.triggerEvent(eventKey);
 
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        `%c[Personalize]`,
-        "color: #9333ea; font-weight: bold;",
-        `\nEvent:\n${eventKey}\n\nPayload:\n`,
-        payload || {}
-      );
-    }
+    console.log(
+      `%c[Personalize]`,
+      "color: #9333ea; font-weight: bold;",
+      `\nEvent:\n${eventKey}\n\nPayload:\n`,
+      payload || {}
+    );
   } catch (error) {
-    if (process.env.NODE_ENV === "development") {
-      console.error(`[Personalize] Error tracking event "${eventKey}":`, error);
-    }
+    console.error(`[Personalize] Error tracking event "${eventKey}":`, error);
   }
 }
