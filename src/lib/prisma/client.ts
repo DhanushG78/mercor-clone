@@ -1,4 +1,4 @@
-import { PrismaClient } from "../../generated/prisma/client";
+import { PrismaClient } from "../../generated/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import { env } from "../env";
@@ -70,5 +70,5 @@ export const prisma = new Proxy({} as PrismaClient, {
   },
 });
 
-export type { PrismaClient } from "../../generated/prisma/client";
+export type { PrismaClient } from "../../generated/prisma";
 

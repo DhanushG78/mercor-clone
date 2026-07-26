@@ -1,5 +1,6 @@
-import type { Application as ApplicationDb, ApplicationStatus } from "../../../generated/prisma/client";
+import type { Application as ApplicationDb, ApplicationStatus } from "../../../generated/prisma";
 import type { S3UploadResult, PresignedUrlResult } from "../services/s3.service";
+import type { ResumeDownloadUrlResult, ReplaceResumeInput } from "../services/resume.service";
 
 /**
  * Reusable Client-Side API Success Structure
@@ -154,11 +155,13 @@ export class ApplicationClient {
 
   /**
    * Performs direct browser-to-S3 HTTP PUT file upload using a presigned URL.
+   * If direct upload fails due to S3 CORS restrictions or browser network policy,
+   * automatically falls back to server-mediated upload (/api/upload-resume).
    * 
    * @param presignedUrl Time-limited presigned PUT URL
    * @param file File object selected by candidate
    */
-  async uploadFileToS3(presignedUrl: string, file: File): Promise<ApiClientResponse<void>> {
+  async uploadFileToS3(presignedUrl: string, file: File): Promise<ApiClientResponse<S3UploadResult | undefined>> {
     try {
       const response = await fetch(presignedUrl, {
         method: "PUT",
@@ -169,11 +172,7 @@ export class ApplicationClient {
       });
 
       if (!response.ok) {
-        return {
-          success: false,
-          message: `Direct S3 upload failed with status ${response.status}: ${response.statusText}`,
-          error: { code: `S3_STATUS_${response.status}` },
-        };
+        throw new Error(`Direct S3 upload HTTP status ${response.status}: ${response.statusText}`);
       }
 
       return {
@@ -182,10 +181,26 @@ export class ApplicationClient {
         data: undefined,
       };
     } catch (error: any) {
-      console.error("[ApplicationClient Error] Direct S3 upload failed:", error);
+      console.warn("[ApplicationClient Warning] Direct browser S3 upload failed (CORS or network policy). Initiating server fallback...", error);
+
+      // Automatic Fallback: Upload file via server endpoint (/api/upload-resume)
+      try {
+        const fallbackRes = await this.uploadResumeFile(file);
+        if (fallbackRes.success) {
+          console.log("[ApplicationClient Success] Server fallback upload completed successfully.");
+          return {
+            success: true,
+            message: "File uploaded to Amazon S3 successfully (via server fallback).",
+            data: fallbackRes.data,
+          };
+        }
+      } catch (fallbackErr) {
+        console.error("[ApplicationClient Error] Server upload fallback failed:", fallbackErr);
+      }
+
       return {
         success: false,
-        message: error.message || "A network error occurred while uploading to Amazon S3.",
+        message: "S3 upload failed. Please verify your Amazon S3 bucket CORS permissions.",
         error: { code: "S3_UPLOAD_NETWORK_ERROR", details: error },
       };
     }
@@ -256,6 +271,40 @@ export class ApplicationClient {
     return this.request<ApplicationDb>(`${this.baseUrl}?id=${id}`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
+    });
+  }
+
+  /**
+   * Retrieves secure time-limited presigned GET download URL for an application's resume.
+   * 
+   * Endpoint: GET /api/applications/[id]/resume
+   */
+  async getResumeDownloadUrl(id: string, expiresInSeconds: number = 900): Promise<ApiClientResponse<ResumeDownloadUrlResult>> {
+    return this.request<ResumeDownloadUrlResult>(`${this.baseUrl}/${id}/resume?expiresIn=${expiresInSeconds}`, {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Atomically replaces an existing resume with new S3 metadata.
+   * 
+   * Endpoint: PUT /api/applications/[id]/resume
+   */
+  async replaceApplicationResume(id: string, metadata: ReplaceResumeInput): Promise<ApiClientResponse<ApplicationDb>> {
+    return this.request<ApplicationDb>(`${this.baseUrl}/${id}/resume`, {
+      method: "PUT",
+      body: JSON.stringify(metadata),
+    });
+  }
+
+  /**
+   * Deletes an application's resume and clears metadata.
+   * 
+   * Endpoint: DELETE /api/applications/[id]/resume
+   */
+  async deleteApplicationResume(id: string): Promise<ApiClientResponse<ApplicationDb>> {
+    return this.request<ApplicationDb>(`${this.baseUrl}/${id}/resume`, {
+      method: "DELETE",
     });
   }
 }

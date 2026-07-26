@@ -77,23 +77,33 @@ export function ApplicationForm({ job, onSubmitSuccess }: ApplicationFormProps) 
 
         const { presignedUrl, objectKey, objectUrl, fileName, fileSize, mimeType } = presignedResponse.data;
 
-        // Step B: Upload file directly from browser to Amazon S3
+        // Step B: Upload file directly from browser to Amazon S3 (with automatic server fallback)
         const directUploadResponse = await applicationClient.uploadFileToS3(presignedUrl, selectedFile);
         setIsUploadingFile(false);
 
         if (!directUploadResponse.success) {
-          toast.error(directUploadResponse.message || "Direct upload to S3 failed. Please try again.");
+          toast.error(directUploadResponse.message || "Upload to S3 failed. Please try again.");
           return;
         }
 
-        // Store returned S3 metadata
-        s3Metadata = {
-          url: objectUrl,
-          key: objectKey,
-          fileName,
-          fileSize,
-          mimeType,
-        };
+        // Store S3 metadata (prefer server fallback metadata if provided)
+        if (directUploadResponse.data) {
+          s3Metadata = {
+            url: directUploadResponse.data.url,
+            key: directUploadResponse.data.key,
+            fileName: directUploadResponse.data.fileName,
+            fileSize: directUploadResponse.data.fileSize,
+            mimeType: directUploadResponse.data.mimeType,
+          };
+        } else {
+          s3Metadata = {
+            url: objectUrl,
+            key: objectKey,
+            fileName,
+            fileSize,
+            mimeType,
+          };
+        }
       }
 
       // 2. Submit candidate application with S3 metadata

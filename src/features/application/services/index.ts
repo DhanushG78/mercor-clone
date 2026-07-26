@@ -16,3 +16,24 @@ export type {
   ServiceResult, 
   SubmitApplicationInput 
 } from "./application.service";
+
+export {
+  S3Service,
+  s3Service
+} from "./s3.service";
+
+export type {
+  S3UploadResult,
+  PresignedUrlResult,
+  FileValidationResult
+} from "./s3.service";
+
+export {
+  ResumeService,
+  resumeService
+} from "./resume.service";
+
+export type {
+  ResumeDownloadUrlResult,
+  ReplaceResumeInput
+} from "./resume.service";

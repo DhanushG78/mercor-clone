@@ -1,5 +1,5 @@
 import { prisma } from "../../../lib/prisma/client";
-import { Application, ApplicationStatus, Prisma } from "../../../generated/prisma/client";
+import { Application, ApplicationStatus, Prisma } from "../../../generated/prisma";
 
 /**
  * Domain Exception: ApplicationRepositoryError
@@ -43,6 +43,17 @@ export interface CreateApplicationInput {
   fileSize?: number | null;
   mimeType?: string | null;
   status?: ApplicationStatus;
+}
+
+/**
+ * Interface definition for updating or clearing Application resume metadata.
+ */
+export interface UpdateResumeMetadataInput {
+  resumeUrl: string | null;
+  resumeKey: string | null;
+  fileName: string | null;
+  fileSize: number | null;
+  mimeType: string | null;
 }
 
 /**
@@ -97,10 +108,10 @@ export class ApplicationRepository {
           status: data.status ?? ApplicationStatus.APPLIED,
         },
       });
-    } catch (error) {
-      // TODO: Replace with production logging
+    } catch (error: any) {
       console.error("[Repository Error] createApplication failed:", error);
-      throw new ApplicationRepositoryError("Failed to persist job application to database.", error);
+      const detail = error?.message ? `: ${error.message}` : "";
+      throw new ApplicationRepositoryError(`Failed to persist job application to database${detail}`, error);
     }
   }
 
@@ -191,6 +202,35 @@ export class ApplicationRepository {
       // TODO: Replace with production logging
       console.error(`[Repository Error] updateApplicationStatus failed for ID ${id}:`, error);
       throw new ApplicationRepositoryError(`Failed to update application status for ID: ${id}.`, error);
+    }
+  }
+
+  /**
+   * Updates or clears resume metadata for a given application ID.
+   * 
+   * Input: application uuid, UpdateResumeMetadataInput fields.
+   * Output: Updated Application object.
+   */
+  async updateResumeMetadata(id: string, metadata: UpdateResumeMetadataInput): Promise<Application> {
+    try {
+      console.log(`[Repository] Updating resume metadata for application ID: ${id}`);
+
+      return await prisma.application.update({
+        where: { id },
+        data: {
+          resumeUrl: metadata.resumeUrl,
+          resumeKey: metadata.resumeKey,
+          fileName: metadata.fileName,
+          fileSize: metadata.fileSize,
+          mimeType: metadata.mimeType,
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new ApplicationNotFoundError(id);
+      }
+      console.error(`[Repository Error] updateResumeMetadata failed for ID ${id}:`, error);
+      throw new ApplicationRepositoryError(`Failed to update resume metadata for ID: ${id}.`, error);
     }
   }
 

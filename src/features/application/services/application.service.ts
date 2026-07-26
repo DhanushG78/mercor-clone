@@ -1,5 +1,5 @@
 import { applicationRepository, ApplicationNotFoundError } from "../repository";
-import { Application, ApplicationStatus } from "../../../generated/prisma/client";
+import { Application, ApplicationStatus } from "../../../generated/prisma";
 
 /**
  * ServiceResult Type
@@ -164,9 +164,6 @@ export class ApplicationService {
       // console.log(`[Business Log] Status of application ${id} changed to ${status}`);
 
       const updatedApplication = await applicationRepository.updateApplicationStatus(id, status);
-
-      // TODO: [Future Notifications] Send notification emails (e.g. interview invitation or rejection email).
-      // e.g. triggerInterviewScheduler(updatedApplication);
 
       return {
         success: true,

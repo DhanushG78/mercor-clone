@@ -1,4 +1,4 @@
-import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3Client } from "../../../lib/aws/s3";
 
@@ -89,19 +89,20 @@ export class S3Service {
 
   /**
    * Generates a date-partitioned, collision-free S3 object key.
-   * Format: resumes/YYYY/MM/uuid-sanitizedOriginalFilename.ext
+   * Format: resumes/YYYY-MM-DD/uuid-sanitizedOriginalFilename.ext
    */
   generateObjectKey(originalFilename: string): string {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
 
     const sanitizedName = originalFilename
       .replace(/[^a-zA-Z0-9._-]/g, "_")
       .replace(/_+/g, "_");
 
     const uuid = crypto.randomUUID();
-    return `resumes/${year}/${month}/${uuid}-${sanitizedName}`;
+    return `resumes/${year}-${month}-${day}/${uuid}-${sanitizedName}`;
   }
 
   /**
@@ -199,6 +200,41 @@ export class S3Service {
     } catch (error: any) {
       console.error("[S3Service Error] Failed to upload resume to S3:", error);
       throw new Error(`S3 Upload failed: ${error.message || "Unknown S3 error"}`);
+    }
+  }
+
+  /**
+   * Generates a time-limited presigned GET URL allowing a client
+   * to download or view a resume file securely from S3.
+   * 
+   * @param key S3 object key
+   * @param expiresInSeconds Expiration limit (default 900s / 15 minutes)
+   * @param fileName Optional original file name for Content-Disposition header
+   */
+  async generatePresignedDownloadUrl(
+    key: string,
+    expiresInSeconds: number = 900,
+    fileName?: string
+  ): Promise<string> {
+    if (!key) {
+      throw new Error("S3 object key is required to generate download URL.");
+    }
+
+    const command = new GetObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+      ResponseContentDisposition: fileName
+        ? `inline; filename="${encodeURIComponent(fileName)}"`
+        : undefined,
+    });
+
+    try {
+      return await getSignedUrl(s3Client, command, {
+        expiresIn: expiresInSeconds,
+      });
+    } catch (error: any) {
+      console.error(`[S3Service Error] Failed to generate download URL for key "${key}":`, error);
+      throw new Error(`Failed to generate download URL: ${error.message || "Unknown error"}`);
     }
   }
 
