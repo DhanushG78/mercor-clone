@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && next build --webpack",
     "build:edge": "esbuild functions/[proxy].edge.source.js --bundle --platform=browser --format=esm --minify --outfile=functions/[proxy].edge.js",
     "start": "next start",
     "lint": "eslint .",
