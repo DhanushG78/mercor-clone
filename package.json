@@ -11,6 +11,8 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1095.0",
+    "@aws-sdk/s3-request-presigner": "^3.1095.0",
     "@contentstack/personalize-edge-sdk": "^1.0.23",
     "@hookform/resolvers": "^5.2.2",
     "@prisma/adapter-pg": "^7.8.0",
@@ -73,6 +75,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "dotenv-cli": "^11.0.0",
+    "esbuild": "^0.25.0",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
@@ -81,8 +84,7 @@
     "prettier": "^3.7.3",
     "prisma": "^7.8.0",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.56.1",
-    "esbuild": "^0.25.0"
+    "typescript-eslint": "^8.56.1"
   },
   "overrides": {
     "postcss": "^8.5.16"

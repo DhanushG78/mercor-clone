@@ -1,9 +1,20 @@
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3Client } from "../../../lib/aws/s3";
 
 export interface S3UploadResult {
   key: string;
   url: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}
+
+export interface PresignedUrlResult {
+  presignedUrl: string;
+  objectKey: string;
+  objectUrl: string;
+  expiration: string;
   fileName: string;
   fileSize: number;
   mimeType: string;
@@ -33,7 +44,8 @@ export const ALLOWED_EXTENSIONS = [".pdf", ".doc", ".docx"];
  * Responsibilities:
  * - Validate file metadata (size, extension, MIME type)
  * - Generate date-partitioned, collision-free S3 object keys
- * - Perform S3 PutObject uploads using AWS SDK v3
+ * - Generate time-limited S3 presigned PUT URLs for browser direct uploads
+ * - Perform fallback server S3 uploads
  * - Handle S3 DeleteObject operations for cleanup/rollback
  */
 export class S3Service {
@@ -47,7 +59,7 @@ export class S3Service {
   }
 
   /**
-   * Validates file size and format restrictions before attempting S3 upload.
+   * Validates file size and format restrictions.
    */
   validateFile(fileName: string, fileSize: number, mimeType: string): FileValidationResult {
     if (!fileName || fileSize <= 0) {
@@ -84,7 +96,6 @@ export class S3Service {
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
 
-    // Sanitize filename to prevent invalid characters in S3 keys
     const sanitizedName = originalFilename
       .replace(/[^a-zA-Z0-9._-]/g, "_")
       .replace(/_+/g, "_");
@@ -94,8 +105,62 @@ export class S3Service {
   }
 
   /**
-   * Uploads a file buffer to Amazon S3.
-   * Executes PutObjectCommand using private access.
+   * Generates a time-limited presigned PUT URL allowing the browser
+   * to upload a file directly to S3 securely.
+   * 
+   * @param fileName Candidate file name
+   * @param mimeType Candidate file MIME type
+   * @param fileSize Candidate file size in bytes
+   * @param expiresInSeconds Expiration limit (default 300s / 5 minutes)
+   */
+  async generatePresignedUploadUrl(
+    fileName: string,
+    mimeType: string,
+    fileSize: number,
+    expiresInSeconds: number = 300
+  ): Promise<PresignedUrlResult> {
+    const validation = this.validateFile(fileName, fileSize, mimeType);
+    if (!validation.valid) {
+      throw new Error(validation.error || "File validation failed.");
+    }
+
+    const objectKey = this.generateObjectKey(fileName);
+    const objectUrl = `${this.bucketUrl}/${objectKey}`;
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: objectKey,
+      ContentType: mimeType,
+      Metadata: {
+        "original-filename": fileName,
+        "uploaded-at": new Date().toISOString(),
+      },
+    });
+
+    try {
+      const presignedUrl = await getSignedUrl(s3Client, command, {
+        expiresIn: expiresInSeconds,
+      });
+
+      const expiration = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
+
+      return {
+        presignedUrl,
+        objectKey,
+        objectUrl,
+        expiration,
+        fileName,
+        fileSize,
+        mimeType,
+      };
+    } catch (error: any) {
+      console.error("[S3Service Error] Failed to generate presigned upload URL:", error);
+      throw new Error(`Failed to generate upload URL: ${error.message || "Unknown error"}`);
+    }
+  }
+
+  /**
+   * Fallback server-mediated file upload to S3.
    */
   async uploadResume(
     buffer: Buffer,
@@ -122,7 +187,6 @@ export class S3Service {
 
     try {
       await s3Client.send(command);
-
       const url = `${this.bucketUrl}/${key}`;
 
       return {
@@ -139,8 +203,7 @@ export class S3Service {
   }
 
   /**
-   * Deletes an object from S3.
-   * Useful for rollback operations if database insertion fails after S3 upload.
+   * Deletes an object from S3 for cleanup/rollback.
    */
   async deleteResume(key: string): Promise<void> {
     if (!key) return;

@@ -50,20 +50,50 @@ export function ApplicationForm({ job, onSubmitSuccess }: ApplicationFormProps) 
 
   const onSubmit = async (data: Application) => {
     try {
-      let s3Result = null;
+      let s3Metadata: {
+        url: string;
+        key: string;
+        fileName: string;
+        fileSize: number;
+        mimeType: string;
+      } | null = null;
 
-      // 1. Upload resume to S3 first if candidate selected a file
+      // 1. If a resume file was selected, execute direct browser-to-S3 upload via Presigned URL
       if (selectedFile) {
         setIsUploadingFile(true);
-        const uploadResponse = await applicationClient.uploadResumeFile(selectedFile);
-        setIsUploadingFile(false);
 
-        if (!uploadResponse.success) {
-          toast.error(uploadResponse.message || "Failed to upload resume to S3. Please try again.");
+        // Step A: Request short-lived S3 Presigned PUT URL from backend
+        const presignedResponse = await applicationClient.getPresignedUploadUrl(
+          selectedFile.name,
+          selectedFile.type || "application/pdf",
+          selectedFile.size
+        );
+
+        if (!presignedResponse.success) {
+          setIsUploadingFile(false);
+          toast.error(presignedResponse.message || "Failed to generate upload URL. Please try again.");
           return;
         }
 
-        s3Result = uploadResponse.data;
+        const { presignedUrl, objectKey, objectUrl, fileName, fileSize, mimeType } = presignedResponse.data;
+
+        // Step B: Upload file directly from browser to Amazon S3
+        const directUploadResponse = await applicationClient.uploadFileToS3(presignedUrl, selectedFile);
+        setIsUploadingFile(false);
+
+        if (!directUploadResponse.success) {
+          toast.error(directUploadResponse.message || "Direct upload to S3 failed. Please try again.");
+          return;
+        }
+
+        // Store returned S3 metadata
+        s3Metadata = {
+          url: objectUrl,
+          key: objectKey,
+          fileName,
+          fileSize,
+          mimeType,
+        };
       }
 
       // 2. Submit candidate application with S3 metadata
@@ -77,11 +107,11 @@ export function ApplicationForm({ job, onSubmitSuccess }: ApplicationFormProps) 
         companyName: job.company?.name || null,
         linkedinUrl: data.linkedinUrl || null,
         portfolioUrl: data.portfolioUrl || null,
-        resumeUrl: s3Result?.url || null,
-        resumeKey: s3Result?.key || null,
-        fileName: s3Result?.fileName || null,
-        fileSize: s3Result?.fileSize || null,
-        mimeType: s3Result?.mimeType || null,
+        resumeUrl: s3Metadata?.url || null,
+        resumeKey: s3Metadata?.key || null,
+        fileName: s3Metadata?.fileName || null,
+        fileSize: s3Metadata?.fileSize || null,
+        mimeType: s3Metadata?.mimeType || null,
       });
 
       if (!response.success) {

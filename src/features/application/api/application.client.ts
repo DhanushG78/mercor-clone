@@ -1,5 +1,5 @@
 import type { Application as ApplicationDb, ApplicationStatus } from "../../../generated/prisma/client";
-import type { S3UploadResult } from "../services/s3.service";
+import type { S3UploadResult, PresignedUrlResult } from "../services/s3.service";
 
 /**
  * Reusable Client-Side API Success Structure
@@ -60,15 +60,14 @@ export interface GetApplicationsClientFilters {
  * ApplicationClient Class
  * 
  * Responsibility:
- * This acts as the single gateway for all frontend HTTP requests related to applications.
- * It serializes outgoing payloads, deserializes JSON responses, handles network/HTTP errors,
- * and formats returns into standardized types.
- * 
- * React components must import this class to interact with the API layer.
+ * Central gateway for all frontend HTTP requests related to applications & file uploads.
+ * Serializes outgoing payloads, deserializes JSON responses, handles network/HTTP errors,
+ * and executes direct browser-to-S3 uploads via presigned URLs.
  */
 export class ApplicationClient {
   private readonly baseUrl = "/api/applications";
   private readonly uploadUrl = "/api/upload-resume";
+  private readonly presignedUrlEndpoint = "/api/uploads/presigned-url";
 
   /**
    * Helper request utility.
@@ -82,7 +81,7 @@ export class ApplicationClient {
       }
 
       const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 30000); // 30s timeout limit for file uploads
+      const id = setTimeout(() => controller.abort(), 30000); // 30s timeout limit
 
       const response = await fetch(url, {
         ...options,
@@ -137,7 +136,63 @@ export class ApplicationClient {
   }
 
   /**
-   * Uploads candidate's resume file to S3 via backend endpoint.
+   * Requests a temporary, short-lived presigned PUT URL from the backend
+   * for direct browser-to-S3 upload.
+   * 
+   * Endpoint: POST /api/uploads/presigned-url
+   */
+  async getPresignedUploadUrl(
+    fileName: string,
+    mimeType: string,
+    fileSize: number
+  ): Promise<ApiClientResponse<PresignedUrlResult>> {
+    return this.request<PresignedUrlResult>(this.presignedUrlEndpoint, {
+      method: "POST",
+      body: JSON.stringify({ fileName, mimeType, fileSize }),
+    });
+  }
+
+  /**
+   * Performs direct browser-to-S3 HTTP PUT file upload using a presigned URL.
+   * 
+   * @param presignedUrl Time-limited presigned PUT URL
+   * @param file File object selected by candidate
+   */
+  async uploadFileToS3(presignedUrl: string, file: File): Promise<ApiClientResponse<void>> {
+    try {
+      const response = await fetch(presignedUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type || "application/pdf",
+        },
+        body: file,
+      });
+
+      if (!response.ok) {
+        return {
+          success: false,
+          message: `Direct S3 upload failed with status ${response.status}: ${response.statusText}`,
+          error: { code: `S3_STATUS_${response.status}` },
+        };
+      }
+
+      return {
+        success: true,
+        message: "File uploaded to Amazon S3 successfully.",
+        data: undefined,
+      };
+    } catch (error: any) {
+      console.error("[ApplicationClient Error] Direct S3 upload failed:", error);
+      return {
+        success: false,
+        message: error.message || "A network error occurred while uploading to Amazon S3.",
+        error: { code: "S3_UPLOAD_NETWORK_ERROR", details: error },
+      };
+    }
+  }
+
+  /**
+   * Legacy fallback: Uploads candidate's resume file to S3 via backend endpoint.
    * Endpoint: POST /api/upload-resume
    */
   async uploadResumeFile(file: File): Promise<ApiClientResponse<S3UploadResult>> {
@@ -151,7 +206,7 @@ export class ApplicationClient {
   }
 
   /**
-   * Submits a candidate's job application from the frontend form.
+   * Submits a candidate's job application with S3 metadata.
    * 
    * Endpoint: POST /api/applications
    */
@@ -179,7 +234,6 @@ export class ApplicationClient {
    * Endpoint: GET /api/applications
    */
   async getApplications(filters: GetApplicationsClientFilters = {}): Promise<ApiClientResponse<ApplicationDb[]>> {
-    // Compile search queries
     const params = new URLSearchParams();
     if (filters.jobId) params.append("jobId", filters.jobId);
     if (filters.email) params.append("email", filters.email);
@@ -199,8 +253,6 @@ export class ApplicationClient {
    * Endpoint: PATCH /api/applications?id={id}
    */
   async changeApplicationStatus(id: string, status: ApplicationStatus): Promise<ApiClientResponse<ApplicationDb>> {
-    // TODO: [Future Timeline Client hook] Track changes in recruiter dashboards
-
     return this.request<ApplicationDb>(`${this.baseUrl}?id=${id}`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
