@@ -2,8 +2,13 @@
 const nextConfig = {
   outputFileTracingExcludes: {
     '*': [
-      './src/generated/prisma/*.wasm*',
-      './node_modules/@prisma/engines/**',
+      'node_modules/@prisma/**',
+      'node_modules/@types/**',
+      'node_modules/typescript/**',
+      'node_modules/eslint/**',
+      'node_modules/prettier/**',
+      'node_modules/esbuild/**',
+      'src/generated/prisma/**',
     ],
   },
   typescript: {
